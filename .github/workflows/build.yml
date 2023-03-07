@@ -1,0 +1,40 @@
+name: Build ACK 5.15 with KSU
+on:
+  workflow_dispatch:
+    inputs:
+      TAG:
+        required: true
+        default: "android13-5.15-2023-03"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v3
+
+    - name: Download Kernel Source
+      run: |
+        cd $GITHUB_WORKSPACE
+        git clone https://github.com/tiann/KernelSU.git
+        git clone https://gerrit.googlesource.com/git-repo
+        mkdir android-kernel && cd android-kernel
+        ../git-repo/repo init --depth=1 --u https://android.googlesource.com/kernel/manifest -b common-${{ github.event.inputs.TAG }}
+        ../git-repo/repo sync -j$(nproc --all)
+        echo "[+] KernelSU setup"
+        GKI_ROOT=$(pwd)
+        echo "[+] GKI_ROOT: $GKI_ROOT"
+        echo "[+] Copy kernel su driver to $GKI_ROOT/common/drivers"
+        ln -sf $GITHUB_WORKSPACE/KernelSU/kernel $GKI_ROOT/common/drivers/kernelsu
+        echo "[+] Add kernel su driver to Makefile"
+        DRIVER_MAKEFILE=$GKI_ROOT/common/drivers/Makefile
+        grep -q "kernelsu" $DRIVER_MAKEFILE || echo "obj-y += kernelsu/" >> $DRIVER_MAKEFILE
+        echo "[+] KernelSU setup Done."
+    - name: Build Boot
+      working-directory: android-kernel
+      run: BUILD_BOOT_IMG=1 SKIP_VENDOR_BOOT=1 KERNEL_BINARY=Image AVB_SIGN_BOOT_IMG=1 AVB_BOOT_PARTITION_SIZE=$((64*1024*1024)) AVB_BOOT_ALGORITHM=SHA256_RSA2048 AVB_BOOT_KEY=prebuilts/kernel-build-tools/linux-x86/share/avb/testkey_rsa2048.pem BOOT_IMAGE_HEADER_VERSION=4 LTO=thin BUILD_CONFIG=common/build.config.gki.aarch64 build/build.sh
+
+    - name: Upload Boot
+      uses: actions/upload-artifact@v3
+      with:
+        name: KernelSU_${{ github.event.inputs.TAG }}.img
+        path: android-kernel/out/*/dist/boot.img
