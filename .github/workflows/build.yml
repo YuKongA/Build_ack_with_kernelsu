@@ -42,8 +42,21 @@ jobs:
     - name: Build Boot
       working-directory: android-kernel
       run: CCACHE="/usr/bin/ccache" BUILD_BOOT_IMG=1 SKIP_VENDOR_BOOT=1 KERNEL_BINARY=Image AVB_SIGN_BOOT_IMG=1 AVB_BOOT_PARTITION_SIZE=$((64*1024*1024)) AVB_BOOT_ALGORITHM=SHA256_RSA2048 AVB_BOOT_KEY=prebuilts/kernel-build-tools/linux-x86/share/avb/testkey_rsa2048.pem BOOT_IMAGE_HEADER_VERSION=4 LTO=thin BUILD_CONFIG=common/build.config.gki.aarch64 build/build.sh
+    - name: Prepare artifacts
+      run: |
+        OUTDIR=android-kernel/out/*/dist/
+        mkdir output
+        cp $OUTDIR/Image ./output/
+        git clone https://github.com/Kernel-SU/AnyKernel3
+        rm -rf ./AnyKernel3/.git
+        cp $OUTDIR/Image ./AnyKernel3/
     - name: Upload Boot
       uses: actions/upload-artifact@v3
       with:
-        name: KernelSU_${{ github.event.inputs.TAG }}.img
+        name: KernelSU_${{ github.event.inputs.TAG }}
         path: android-kernel/out/*/dist/boot.img
+    - name: Upload AnyKernel3
+      uses: actions/upload-artifact@v3
+      with:
+          name: AnyKernel3_KernelSU_${{ github.event.inputs.TAG }}
+          path: ./AnyKernel3/*
