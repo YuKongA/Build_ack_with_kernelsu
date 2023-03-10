@@ -53,7 +53,7 @@ jobs:
     - name: Upload Boot
       uses: actions/upload-artifact@v3
       with:
-        name: KernelSU_${{ github.event.inputs.TAG }}
+        name: Boot_KernelSU_${{ github.event.inputs.TAG }}
         path: android-kernel/out/*/dist/boot.img
     - name: Upload AnyKernel3
       uses: actions/upload-artifact@v3
