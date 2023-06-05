@@ -4,10 +4,11 @@ on:
     inputs:
       TAG:
         required: true
-        default: "android12-5.10-2023-05"
+        default: "android12-5.10-2023-06"
 
 jobs:
   build:
+    name: Build ${{ github.event.inputs.TAG }}
     runs-on: ubuntu-latest
     env:
       CCACHE_COMPILERCHECK: "%compiler% -dumpmachine; %compiler% -dumpversion"
