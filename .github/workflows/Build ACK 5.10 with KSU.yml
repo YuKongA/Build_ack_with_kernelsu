@@ -4,7 +4,7 @@ on:
     inputs:
       TAG:
         required: true
-        default: "android12-5.10-2023-06"
+        default: "android12-5.10-2023-07"
 
 jobs:
   build:
@@ -16,8 +16,15 @@ jobs:
       CCACHE_MAXSIZE: "2G"
       CCACHE_HARDLINK: "true"
     steps:
-    - uses: actions/checkout@v3
-    - uses: hendrikmuhs/ccache-action@v1.2
+    - name: Maximize Build Space
+      uses: easimon/maximize-build-space@master
+      with:
+        swap-size-mb: 8192
+        remove-dotnet: 'true'
+        remove-android: 'true'
+        remove-haskell: 'true'
+    - uses: actions/checkout@main
+    - uses: hendrikmuhs/ccache-action@main
       with:
         key: ${{ github.event.inputs.TAG }}
         append-timestamp: false
