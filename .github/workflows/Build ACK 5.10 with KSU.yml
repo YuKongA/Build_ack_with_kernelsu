@@ -30,19 +30,30 @@ jobs:
         append-timestamp: false
     - name: Download Kernel Source
       run: |
+        echo "Free space:"
+        df -h
         cd $GITHUB_WORKSPACE
         git clone https://github.com/tiann/KernelSU.git
-        git clone https://gerrit.googlesource.com/git-repo
+        sudo apt-get install repo -y
         mkdir android-kernel && cd android-kernel
-        ../git-repo/repo init --depth=1 --u https://android.googlesource.com/kernel/manifest -b common-${{ github.event.inputs.TAG }}
+        repo init --depth=1 --u https://android.googlesource.com/kernel/manifest -b common-${{ github.event.inputs.TAG }} --repo-rev=v2.16
         REMOTE_BRANCH=$(git ls-remote https://android.googlesource.com/kernel/common ${{ github.event.inputs.TAG }})
+        DEFAULT_MANIFEST_PATH=.repo/manifests/default.xml
         if grep -q deprecated <<< $REMOTE_BRANCH; then
           echo "Found deprecated branch: ${{ github.event.inputs.TAG }}"
-          sed -i 's/"${{ github.event.inputs.TAG }}"/"deprecated\/${{ github.event.inputs.TAG }}"/g' .repo/manifests/default.xml
-          cat .repo/manifests/default.xml
+          sed -i 's/"${{ github.event.inputs.TAG }}"/"deprecated\/${{ github.event.inputs.TAG }}"/g' $DEFAULT_MANIFEST_PATH
         fi
-        ../git-repo/repo sync -j$(nproc --all)
+        repo --version
+        repo --trace sync -q -c -j$(nproc --all) --no-tags
+        if [ -d prebuilts/clang/host/linux-x86 ] && [ -f common/build.config.constants ]; then
+          ls -d prebuilts/clang/host/linux-x86/clang-r* | grep -v $(sed -n 's/^CLANG_VERSION=//p' common/build.config.constants)
+        fi
+        rm -rf .repo
+        df -h
+    - name: Setup KernelSU
+      run: |
         echo "[+] KernelSU setup"
+        cd $GITHUB_WORKSPACE/android-kernel
         GKI_ROOT=$(pwd)
         echo "[+] GKI_ROOT: $GKI_ROOT"
         echo "[+] Copy kernel su driver to $GKI_ROOT/common/drivers"
