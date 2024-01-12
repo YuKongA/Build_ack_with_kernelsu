@@ -4,7 +4,7 @@ on:
     inputs:
       TAG:
         required: true
-        default: "android13-5.15-2023-07"
+        default: "android13-5.15-2023-12"
 
 jobs:
   build:
@@ -20,20 +20,20 @@ jobs:
       uses: easimon/maximize-build-space@master
       with:
         swap-size-mb: 8192
+        root-reserve-mb: 8192
+        temp-reserve-mb: 2048
         remove-dotnet: 'true'
         remove-android: 'true'
         remove-haskell: 'true'
-    - uses: actions/checkout@main
-    - uses: hendrikmuhs/ccache-action@main
-      with:
-        key: ${{ github.event.inputs.TAG }}
-        append-timestamp: false
+        remove-codeql: 'true'
+
     - name: Download Kernel Source
       run: |
         echo "Free space:"
         df -h
         cd $GITHUB_WORKSPACE
-        git clone https://github.com/tiann/KernelSU.git
+        git config --global user.name "YuKongA"
+        git config --global user.email 70465933+YuKongA@users.noreply.github.com
         sudo apt-get install repo -y
         mkdir android-kernel && cd android-kernel
         repo init --depth=1 --u https://android.googlesource.com/kernel/manifest -b common-${{ github.event.inputs.TAG }} --repo-rev=v2.16
@@ -43,29 +43,33 @@ jobs:
           echo "Found deprecated branch: ${{ github.event.inputs.TAG }}"
           sed -i 's/"${{ github.event.inputs.TAG }}"/"deprecated\/${{ github.event.inputs.TAG }}"/g' $DEFAULT_MANIFEST_PATH
         fi
-        repo --version
         repo --trace sync -q -c -j$(nproc --all) --no-tags
-        if [ -d prebuilts/clang/host/linux-x86 ] && [ -f common/build.config.constants ]; then
-          ls -d prebuilts/clang/host/linux-x86/clang-r* | grep -v $(sed -n 's/^CLANG_VERSION=//p' common/build.config.constants)
-        fi
-        rm -rf .repo
         df -h
+
     - name: Setup KernelSU
       run: |
-        echo "[+] KernelSU setup"
-        cd $GITHUB_WORKSPACE/android-kernel
-        GKI_ROOT=$(pwd)
-        echo "[+] GKI_ROOT: $GKI_ROOT"
-        echo "[+] Copy kernel su driver to $GKI_ROOT/common/drivers"
-        ln -sf $GITHUB_WORKSPACE/KernelSU/kernel $GKI_ROOT/common/drivers/kernelsu
-        echo "[+] Add kernel su driver to Makefile"
-        DRIVER_MAKEFILE=$GKI_ROOT/common/drivers/Makefile
-        grep -q "kernelsu" $DRIVER_MAKEFILE || echo "obj-y += kernelsu/" >> $DRIVER_MAKEFILE
-        echo "[+] Apply KernelSU patches"
-        cd $GKI_ROOT/common/ && git apply $GITHUB_WORKSPACE/KernelSU/.github/patches/5.15/*.patch
-        echo "Patch script/setlocalversion"
-        sed -i 's/-dirty//g' $GKI_ROOT/common/scripts/setlocalversion
-        echo "[+] KernelSU setup done."
+          cd $GITHUB_WORKSPACE
+          git clone https://github.com/Ylarod/KernelSU.git
+          cd $GITHUB_WORKSPACE/android-kernel
+          echo "[+] KernelSU setup"
+          GKI_ROOT=$(pwd)
+          echo "[+] GKI_ROOT: $GKI_ROOT"
+          echo "[+] Copy KernelSU driver to $GKI_ROOT/common/drivers"
+          ln -sf $GITHUB_WORKSPACE/KernelSU/kernel $GKI_ROOT/common/drivers/kernelsu
+          echo "[+] Add KernelSU driver to Makefile"
+          DRIVER_MAKEFILE=$GKI_ROOT/common/drivers/Makefile
+          grep -q "kernelsu" $DRIVER_MAKEFILE || echo "obj-y += kernelsu/" >> $DRIVER_MAKEFILE
+          echo "[+] Apply CCACHE patches"
+          cd $GKI_ROOT/common/ && git apply $GITHUB_WORKSPACE/KernelSU/.github/patches/5.15/*.patch
+          repo status
+          echo "[+] KernelSU setup done."
+
+    - name: Setup ccache
+      uses: hendrikmuhs/ccache-action@v1.2
+      with:
+        key: gki-kernel-aarch64-${{ github.event.inputs.TAG }}
+        max-size: 2G
+
     - name: Symbol Magic
       run: |
           echo "[+] Export all symbol from abi_gki_aarch64.xml"
@@ -76,9 +80,21 @@ jobs:
           # python3 $KSU_ROOT/scripts/abi_gki_all.py $ABI_XML > $SYMBOL_LIST
           echo "[+] Add KernelSU symbols"
           cat $KSU_ROOT/kernel/export_symbol.txt | awk '{sub("[ \t]+","");print "  "$0}' >> $SYMBOL_LIST
+
+    - name: Remove protected symbols
+      working-directory: android-kernel
+      run: rm common/android/abi_gki_protected_exports_* || echo "No protected exports!"
+
+    - name: Make working directory clean to avoid dirty
+      working-directory: android-kernel
+      run: |
+        cd common/ && git add -A && git commit -a -m "Add KernelSU"
+        repo status
+
     - name: Build Boot
       working-directory: android-kernel
       run: CCACHE="/usr/bin/ccache" BUILD_BOOT_IMG=1 SKIP_VENDOR_BOOT=1 KERNEL_BINARY=Image AVB_SIGN_BOOT_IMG=1 AVB_BOOT_PARTITION_SIZE=$((64*1024*1024)) AVB_BOOT_ALGORITHM=SHA256_RSA2048 AVB_BOOT_KEY=prebuilts/kernel-build-tools/linux-x86/share/avb/testkey_rsa2048.pem BOOT_IMAGE_HEADER_VERSION=4 LTO=thin BUILD_CONFIG=common/build.config.gki.aarch64 build/build.sh
+
     - name: Prepare artifacts
       run: |
         OUTDIR=android-kernel/out/*/dist/
@@ -87,11 +103,13 @@ jobs:
         git clone https://github.com/Kernel-SU/AnyKernel3
         rm -rf ./AnyKernel3/.git
         cp $OUTDIR/Image ./AnyKernel3/
+
     - name: Upload Boot
       uses: actions/upload-artifact@v3
       with:
         name: Boot_KernelSU_${{ github.event.inputs.TAG }}
         path: android-kernel/out/*/dist/boot.img
+
     - name: Upload AnyKernel3
       uses: actions/upload-artifact@v3
       with:
