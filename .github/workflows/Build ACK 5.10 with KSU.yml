@@ -5,6 +5,10 @@ on:
       TAG:
         required: true
         default: "android12-5.10-2023-12"
+      ENABLE_KSU:
+        required: true
+        default: "true"
+        description: 'Enable KernelSU'
 
 jobs:
   build:
@@ -47,6 +51,7 @@ jobs:
         df -h
 
     - name: Setup KernelSU
+      if: ${{ github.event.inputs.ENABLE_KSU }} == 'true'
       run: |
           cd $GITHUB_WORKSPACE
           git clone https://github.com/tiann/KernelSU.git
