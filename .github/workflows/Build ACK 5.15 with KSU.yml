@@ -5,6 +5,11 @@ on:
       TAG:
         required: true
         default: "android13-5.15-2023-12"
+      ENABLE_KSU:
+        required: true
+        type: boolean
+        default: true
+        description: 'Enable KernelSU'
 
 jobs:
   build:
@@ -47,6 +52,7 @@ jobs:
         df -h
 
     - name: Setup KernelSU
+      if: ${{ github.event.inputs.ENABLE_KSU }} == 'true'
       run: |
           cd $GITHUB_WORKSPACE
           git clone https://github.com/tiann/KernelSU.git
@@ -64,13 +70,8 @@ jobs:
           repo status
           echo "[+] KernelSU setup done."
 
-    - name: Setup ccache
-      uses: hendrikmuhs/ccache-action@v1.2
-      with:
-        key: gki-kernel-aarch64-${{ github.event.inputs.TAG }}
-        max-size: 2G
-
     - name: Symbol Magic
+      if: ${{ github.event.inputs.ENABLE_KSU }} == 'true'
       run: |
           echo "[+] Export all symbol from abi_gki_aarch64.xml"
           COMMON_ROOT=$GITHUB_WORKSPACE/android-kernel/common
@@ -90,6 +91,12 @@ jobs:
       run: |
         cd common/ && git add -A && git commit -a -m "Add KernelSU"
         repo status
+
+    - name: Setup ccache
+      uses: hendrikmuhs/ccache-action@v1.2
+      with:
+        key: gki-kernel-aarch64-${{ github.event.inputs.TAG }}
+        max-size: 2G
 
     - name: Build Boot
       working-directory: android-kernel

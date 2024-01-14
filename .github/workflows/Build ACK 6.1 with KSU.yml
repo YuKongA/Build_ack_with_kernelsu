@@ -5,16 +5,17 @@ on:
       TAG:
         required: true
         default: "android14-6.1-2023-12"
+      ENABLE_KSU:
+        required: true
+        type: boolean
+        default: true
+        description: 'Enable KernelSU'
 
 jobs:
   build:
     name: Build ${{ github.event.inputs.TAG }}
     runs-on: ubuntu-latest
-    env:
-      CCACHE_COMPILERCHECK: "%compiler% -dumpmachine; %compiler% -dumpversion"
-      CCACHE_NOHASHDIR: "true"
-      CCACHE_MAXSIZE: "2G"
-      CCACHE_HARDLINK: "true"
+
     steps:
     - name: Maximize Build Space
       uses: easimon/maximize-build-space@master
@@ -47,6 +48,7 @@ jobs:
         df -h
 
     - name: Setup KernelSU
+      if: ${{ github.event.inputs.ENABLE_KSU }} == 'true'
       run: |
           cd $GITHUB_WORKSPACE
           git clone https://github.com/tiann/KernelSU.git
@@ -62,13 +64,8 @@ jobs:
           repo status
           echo "[+] KernelSU setup done."
 
-    - name: Setup ccache
-      uses: hendrikmuhs/ccache-action@v1.2
-      with:
-        key: gki-kernel-aarch64-${{ github.event.inputs.TAG }}
-        max-size: 2G
-
     - name: Symbol Magic
+      if: ${{ github.event.inputs.ENABLE_KSU }} == 'true'
       run: |
           echo "[+] Export all symbol from abi_gki_aarch64.xml"
           COMMON_ROOT=$GITHUB_WORKSPACE/android-kernel/common
@@ -91,7 +88,7 @@ jobs:
 
     - name: Build Boot
       working-directory: android-kernel
-      run: tools/bazel run --disk_cache=/home/runner/.cache/bazel --config=fast --config=stamp --lto=thin //common:kernel_aarch64_dist -- --dist_dir=dist
+      run: tools/bazel run --config=fast --config=stamp --lto=thin //common:kernel_aarch64_dist -- --dist_dir=dist
 
     - name: Prepare artifacts
       run: |
