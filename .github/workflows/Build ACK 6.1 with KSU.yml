@@ -7,7 +7,8 @@ on:
         default: "android14-6.1-2023-12"
       ENABLE_KSU:
         required: true
-        default: "true"
+        type: boolean
+        default: true
         description: 'Enable KernelSU'
 
 jobs:
