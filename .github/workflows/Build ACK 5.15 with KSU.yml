@@ -4,7 +4,7 @@ on:
     inputs:
       TAG:
         required: true
-        default: "android13-5.15-2023-12"
+        default: "android13-5.15-2024-02"
       ENABLE_KSU:
         required: true
         type: boolean
