@@ -65,8 +65,6 @@ jobs:
           echo "[+] Add KernelSU driver to Makefile"
           DRIVER_MAKEFILE=$GKI_ROOT/common/drivers/Makefile
           grep -q "kernelsu" $DRIVER_MAKEFILE || echo "obj-y += kernelsu/" >> $DRIVER_MAKEFILE
-          echo "[+] Apply CCACHE patches"
-          cd $GKI_ROOT/common/ && git apply $GITHUB_WORKSPACE/KernelSU/.github/patches/5.15/*.patch
           repo status
           echo "[+] KernelSU setup done."
 
@@ -100,7 +98,7 @@ jobs:
 
     - name: Build Boot
       working-directory: android-kernel
-      run: CCACHE="/usr/bin/ccache" BUILD_BOOT_IMG=1 SKIP_VENDOR_BOOT=1 KERNEL_BINARY=Image AVB_SIGN_BOOT_IMG=1 AVB_BOOT_PARTITION_SIZE=$((64*1024*1024)) AVB_BOOT_ALGORITHM=SHA256_RSA2048 AVB_BOOT_KEY=prebuilts/kernel-build-tools/linux-x86/share/avb/testkey_rsa2048.pem BOOT_IMAGE_HEADER_VERSION=4 LTO=thin BUILD_CONFIG=common/build.config.gki.aarch64 build/build.sh
+      run: BUILD_BOOT_IMG=1 SKIP_VENDOR_BOOT=1 KERNEL_BINARY=Image AVB_SIGN_BOOT_IMG=1 AVB_BOOT_PARTITION_SIZE=$((64*1024*1024)) AVB_BOOT_ALGORITHM=SHA256_RSA2048 AVB_BOOT_KEY=prebuilts/kernel-build-tools/linux-x86/share/avb/testkey_rsa2048.pem BOOT_IMAGE_HEADER_VERSION=4 LTO=thin BUILD_CONFIG=common/build.config.gki.aarch64 build/build.sh CC="/usr/bin/ccache clang"
 
     - name: Prepare artifacts
       run: |
