@@ -1,4 +1,4 @@
-name: Build KSU as Kmod
+name: Build KSU as LKM
 on:
   workflow_dispatch:
     inputs:
@@ -10,7 +10,11 @@ jobs:
   build:
     name: Build ${{ github.event.inputs.TAG }}
     runs-on: ubuntu-latest
-
+    env:
+      CCACHE_COMPILERCHECK: "%compiler% -dumpmachine; %compiler% -dumpversion"
+      CCACHE_NOHASHDIR: "true"
+      CCACHE_MAXSIZE: "2G"
+      CCACHE_HARDLINK: "true"
     steps:
     - name: Maximize Build Space
       uses: easimon/maximize-build-space@master
@@ -110,9 +114,14 @@ jobs:
         cd common/ && git add -A && git commit -a -m "Add KernelSU"
         repo status
 
-    - name: Build Boot
+    - name: Build LKM
       working-directory: android-kernel
-      run: tools/bazel run --disk_cache=/home/runner/.cache/bazel --config=fast --config=stamp --lto=thin //common:kernel_aarch64_dist -- --dist_dir=dist
+      run: |
+        if [ -e build/build.sh ]; then
+          LTO=thin BUILD_CONFIG=common/build.config.gki.aarch64 build/build.sh CC="/usr/bin/ccache clang"
+        else
+          tools/bazel run --disk_cache=/home/runner/.cache/bazel --config=fast --config=stamp --lto=thin //common:kernel_aarch64_dist -- --dist_dir=dist
+        fi
 
     - name: Prepare artifacts
       run: |
@@ -125,4 +134,3 @@ jobs:
       with:
         name: LKM_KernelSU_${{ github.event.inputs.TAG }}
         path: ./output/kernelsu.ko
-
