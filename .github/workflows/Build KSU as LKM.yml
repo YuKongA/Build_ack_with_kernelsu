@@ -1,15 +1,10 @@
-name: Build ACK 6.1 with KSU
+name: Build KSU as Kmod
 on:
   workflow_dispatch:
     inputs:
       TAG:
         required: true
-        default: "android14-6.1-2024-02"
-      ENABLE_KSU:
-        required: true
-        type: boolean
-        default: true
-        description: 'Enable KernelSU'
+        default: "android14-6.1-2023-06"
 
 jobs:
   build:
@@ -48,10 +43,9 @@ jobs:
         df -h
 
     - name: Setup KernelSU
-      if: ${{ github.event.inputs.ENABLE_KSU }} == 'true'
       run: |
           cd $GITHUB_WORKSPACE
-          git clone https://github.com/tiann/KernelSU.git
+          git clone https://github.com/tiann/KernelSU.git -b kmod
           cd $GITHUB_WORKSPACE/android-kernel
           echo "[+] KernelSU setup"
           GKI_ROOT=$(pwd)
@@ -65,7 +59,6 @@ jobs:
           echo "[+] KernelSU setup done."
 
     - name: Symbol Magic
-      if: ${{ github.event.inputs.ENABLE_KSU }} == 'true'
       run: |
           echo "[+] Export all symbol from abi_gki_aarch64.xml"
           COMMON_ROOT=$GITHUB_WORKSPACE/android-kernel/common
@@ -75,6 +68,37 @@ jobs:
           # python3 $KSU_ROOT/scripts/abi_gki_all.py $ABI_XML > $SYMBOL_LIST
           echo "[+] Add KernelSU symbols"
           cat $KSU_ROOT/kernel/export_symbol.txt | awk '{sub("[ \t]+","");print "  "$0}' >> $SYMBOL_LIST
+
+    - name: Setup ccache
+      uses: hendrikmuhs/ccache-action@v1.2
+      with:
+        key: gki-kernel-aarch64-${{ github.event.inputs.TAG }}
+        max-size: 2G
+
+    - name: Setup for LKM
+      working-directory: android-kernel
+      run: |
+        pip install ast-grep-cli
+        ast-grep -U -p '$$$ check_exports($$$) {$$$}' -r '' common/scripts/mod/modpost.c
+        ast-grep -U -p 'check_exports($$$);' -r '' common/scripts/mod/modpost.c
+        sed -i '1i KSU_MODULE := 1' $GITHUB_WORKSPACE/KernelSU/kernel/Makefile
+        echo "drivers/kernelsu/kernelsu.ko" >> common/android/gki_aarch64_modules
+        # bazel build, android14-5.15, android14-6.1 use bazel
+        if [ ! -e build/build.sh ]; then
+          sed -i 's/needs unknown symbol/Dont abort when unknown symbol/g' build/kernel/*.sh || echo "No unknown symbol scripts found"
+          if [ -e common/modules.bzl ]; then
+            sed -i 's/_COMMON_GKI_MODULES_LIST = \[/_COMMON_GKI_MODULES_LIST = \[ "drivers\/kernelsu\/kernelsu.ko",/g' common/modules.bzl
+          fi
+        else
+          TARGET_FILE="build/kernel/build.sh"
+          if [ ! -e "$TARGET_FILE" ]; then
+            TARGET_FILE="build/build.sh"
+          fi
+          sed -i 's/needs unknown symbol/Dont abort when unknown symbol/g' $TARGET_FILE || echo "No unknown symbol in $TARGET_FILE"
+          sed -i 's/if ! diff -u "\${KERNEL_DIR}\/\${MODULES_ORDER}" "\${OUT_DIR}\/modules\.order"; then/if false; then/g' $TARGET_FILE
+          sed -i 's@${ROOT_DIR}/build/abi/compare_to_symbol_list@echo@g' $TARGET_FILE
+          sed -i 's/needs unknown symbol/Dont abort when unknown symbol/g' build/kernel/*.sh || echo "No unknown symbol scripts found"
+        fi
 
     - name: Remove protected symbols
       working-directory: android-kernel
@@ -94,19 +118,11 @@ jobs:
       run: |
         OUTDIR=android-kernel/dist
         mkdir output
-        cp $OUTDIR/Image ./output/
-        git clone https://github.com/Kernel-SU/AnyKernel3
-        rm -rf ./AnyKernel3/.git
-        cp $OUTDIR/Image ./AnyKernel3/
+        cp $OUTDIR/kernelsu.ko ./output/
 
-    - name: Upload Boot
+    - name: Upload LKM
       uses: actions/upload-artifact@v4
       with:
-        name: Boot_KernelSU_${{ github.event.inputs.TAG }}
-        path: android-kernel/dist/boot.img
+        name: LKM_KernelSU_${{ github.event.inputs.TAG }}
+        path: ./output/kernelsu.ko
 
-    - name: Upload AnyKernel3
-      uses: actions/upload-artifact@v4
-      with:
-          name: AnyKernel3_KernelSU_${{ github.event.inputs.TAG }}
-          path: ./AnyKernel3/*

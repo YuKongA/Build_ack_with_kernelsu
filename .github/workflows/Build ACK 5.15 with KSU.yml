@@ -98,11 +98,19 @@ jobs:
 
     - name: Build Boot
       working-directory: android-kernel
-      run: BUILD_BOOT_IMG=1 SKIP_VENDOR_BOOT=1 KERNEL_BINARY=Image AVB_SIGN_BOOT_IMG=1 AVB_BOOT_PARTITION_SIZE=$((64*1024*1024)) AVB_BOOT_ALGORITHM=SHA256_RSA2048 AVB_BOOT_KEY=prebuilts/kernel-build-tools/linux-x86/share/avb/testkey_rsa2048.pem BOOT_IMAGE_HEADER_VERSION=4 LTO=thin BUILD_CONFIG=common/build.config.gki.aarch64 build/build.sh CC="/usr/bin/ccache clang"
+      run: |
+        if [ -e build/build.sh ]; then
+          LTO=thin BUILD_CONFIG=common/build.config.gki.aarch64 build/build.sh CC="/usr/bin/ccache clang"
+        else
+          tools/bazel run --disk_cache=/home/runner/.cache/bazel --config=fast --config=stamp --lto=thin //common:kernel_aarch64_dist -- --dist_dir=dist
+        fi
 
     - name: Prepare artifacts
       run: |
         OUTDIR=android-kernel/out/*/dist/
+        if [ ! -e $OUTDIR ]; then
+          OUTDIR=android-kernel/dist
+        fi
         mkdir output
         cp $OUTDIR/Image ./output/
         git clone https://github.com/Kernel-SU/AnyKernel3
