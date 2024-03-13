@@ -118,16 +118,23 @@ jobs:
       working-directory: android-kernel
       run: |
         if [ -e build/build.sh ]; then
-          LTO=thin BUILD_CONFIG=common/build.config.gki.aarch64 build/build.sh CC="/usr/bin/ccache clang"
+          LTO=thin BUILD_CONFIG=common/build.config.gki.aarch64 build/build.sh CC="/usr/bin/ccache clang" || echo "COMPILE_KERNEL=false" >>$GITHUB_ENV
         else
-          tools/bazel run --disk_cache=/home/runner/.cache/bazel --config=fast --config=stamp --lto=thin //common:kernel_aarch64_dist -- --dist_dir=dist
+          tools/bazel run --disk_cache=/home/runner/.cache/bazel --config=fast --config=stamp --lto=thin //common:kernel_aarch64_dist -- --dist_dir=dist || echo "COMPILE_KERNEL=false" >>$GITHUB_ENV
         fi
 
     - name: Prepare artifacts
       run: |
-        OUTDIR=android-kernel/dist
         mkdir output
-        cp $OUTDIR/kernelsu.ko ./output/
+        sudo apt-get install llvm-15 -y
+        if [ ${{ env.COMPILE_KERNEL }} = "false" ]; then
+          sudo apt-get install fd-find -y
+          fdfind -e ko kernelsu -x cp -f {} ./output/
+        else
+          OUTDIR=android-kernel/dist
+          cp $OUTDIR/kernelsu.ko ./output/
+        fi
+        llvm-strip-15 --strip-debug ./output/kernelsu.ko
 
     - name: Upload LKM
       uses: actions/upload-artifact@v4
