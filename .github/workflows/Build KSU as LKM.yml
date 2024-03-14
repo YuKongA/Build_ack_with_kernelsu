@@ -86,8 +86,6 @@ jobs:
         ast-grep -U -p '$$$ check_exports($$$) {$$$}' -r '' common/scripts/mod/modpost.c
         ast-grep -U -p 'check_exports($$$);' -r '' common/scripts/mod/modpost.c
         sed -i '1i KSU_MODULE := 1' $GITHUB_WORKSPACE/KernelSU/kernel/Makefile
-        echo "drivers/kernelsu/kernelsu.ko" >> common/android/gki_aarch64_modules
-        # bazel build, android14-5.15, android14-6.1 use bazel
         if [ ! -e build/build.sh ]; then
           sed -i 's/needs unknown symbol/Dont abort when unknown symbol/g' build/kernel/*.sh || echo "No unknown symbol scripts found"
           if [ -e common/modules.bzl ]; then
@@ -131,7 +129,10 @@ jobs:
           sudo apt-get install fd-find -y
           fdfind -e ko kernelsu -x cp -f {} ./output/
         else
-          OUTDIR=android-kernel/dist
+          OUTDIR=android-kernel/out/*/dist
+          if [ ! -e $OUTDIR ]; then
+            OUTDIR=android-kernel/dist
+          fi
           cp $OUTDIR/kernelsu.ko ./output/
         fi
         llvm-strip-15 --strip-debug ./output/kernelsu.ko
