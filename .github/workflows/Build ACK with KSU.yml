@@ -34,7 +34,7 @@ jobs:
 
     - name: Download Kernel Source
       run: |
-        sudo apt-get remove meson firefox -y
+        sudo apt-get remove firefox -y
         sudo apt-get update
         sudo apt-get upgrade -y
         sudo apt-get install repo -y
@@ -105,7 +105,7 @@ jobs:
         if [ -e build/build.sh ]; then
           BUILD_BOOT_IMG=1 SKIP_VENDOR_BOOT=1 KERNEL_BINARY=Image AVB_SIGN_BOOT_IMG=1 AVB_BOOT_PARTITION_SIZE=$((64*1024*1024)) AVB_BOOT_ALGORITHM=SHA256_RSA2048 AVB_BOOT_KEY=prebuilts/kernel-build-tools/linux-x86/share/avb/testkey_rsa2048.pem BOOT_IMAGE_HEADER_VERSION=4 LTO=thin BUILD_CONFIG=common/build.config.gki.aarch64 build/build.sh CC="/usr/bin/ccache clang"
         else
-          tools/bazel run --disk_cache=/home/runner/.cache/bazel --config=fast --config=stamp --lto=thin //common:kernel_aarch64_dist -- --dist_dir=dist
+          tools/bazel run --cache_dir=/home/runner/.cache/bazel --config=fast --config=stamp --lto=thin //common:kernel_aarch64_dist -- --dist_dir=dist
         fi
 
     - name: Prepare artifacts
