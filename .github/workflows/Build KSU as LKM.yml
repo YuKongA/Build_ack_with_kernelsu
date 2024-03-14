@@ -29,12 +29,15 @@ jobs:
 
     - name: Download Kernel Source
       run: |
+        sudo apt-get remove meson firefox -y
+        sudo apt-get update
+        sudo apt-get upgrade -y
+        sudo apt-get install repo -y
         echo "Free space:"
         df -h
         cd $GITHUB_WORKSPACE
         git config --global user.name "YuKongA"
         git config --global user.email 70465933+YuKongA@users.noreply.github.com
-        sudo apt-get install repo -y
         mkdir android-kernel && cd android-kernel
         repo init --depth=1 --u https://android.googlesource.com/kernel/manifest -b common-${{ github.event.inputs.TAG }} --repo-rev=v2.16
         REMOTE_BRANCH=$(git ls-remote https://android.googlesource.com/kernel/common ${{ github.event.inputs.TAG }})
@@ -58,7 +61,7 @@ jobs:
           ln -sf $GITHUB_WORKSPACE/KernelSU/kernel $GKI_ROOT/common/drivers/kernelsu
           echo "[+] Add KernelSU driver to Makefile"
           DRIVER_MAKEFILE=$GKI_ROOT/common/drivers/Makefile
-          grep -q "kernelsu" $DRIVER_MAKEFILE || echo "obj-y += kernelsu/" >> $DRIVER_MAKEFILE
+          grep -q "kernelsu" $DRIVER_MAKEFILE || echo "obj-m += kernelsu/" >> $DRIVER_MAKEFILE
           repo status
           echo "[+] KernelSU setup done."
 
