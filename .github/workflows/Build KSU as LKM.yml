@@ -52,7 +52,7 @@ jobs:
     - name: Setup KernelSU
       run: |
         cd $GITHUB_WORKSPACE
-        git clone https://github.com/tiann/KernelSU.git -b kmod
+        git clone https://github.com/tiann/KernelSU.git -b main
         cd $GITHUB_WORKSPACE/android-kernel
         echo "[+] KernelSU setup"
         GKI_ROOT=$(pwd)
