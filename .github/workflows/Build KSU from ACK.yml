@@ -1,14 +1,24 @@
-name: Build KSU as LKM
+name: Build KSU from ACK
 on:
   workflow_dispatch:
     inputs:
       TAG:
         required: true
         default: "android14-6.1-2023-06"
+      ENABLE_KSU:
+        required: true
+        type: boolean
+        default: true
+        description: 'Enable KernelSU'
+      BUILD_AS_LKM:
+        required: true
+        type: boolean
+        default: false
+        description: 'Build KernelSU as LKM'
 
 jobs:
   build:
-    name: Build ${{ github.event.inputs.TAG }}
+    name: Build ${{ inputs.TAG }}
     runs-on: ubuntu-latest
     env:
       CCACHE_COMPILERCHECK: "%compiler% -dumpmachine; %compiler% -dumpversion"
@@ -33,23 +43,21 @@ jobs:
         sudo apt-get update
         sudo apt-get upgrade -y
         sudo apt-get install repo -y
-        echo "Free space:"
-        df -h
         cd $GITHUB_WORKSPACE
         git config --global user.name "YuKongA"
         git config --global user.email 70465933+YuKongA@users.noreply.github.com
         mkdir android-kernel && cd android-kernel
-        repo init --depth=1 --u https://android.googlesource.com/kernel/manifest -b common-${{ github.event.inputs.TAG }} --repo-rev=v2.16
-        REMOTE_BRANCH=$(git ls-remote https://android.googlesource.com/kernel/common ${{ github.event.inputs.TAG }})
+        repo init --depth=1 --u https://android.googlesource.com/kernel/manifest -b common-${{ inputs.TAG }} --repo-rev=v2.16
+        REMOTE_BRANCH=$(git ls-remote https://android.googlesource.com/kernel/common ${{ inputs.TAG }})
         DEFAULT_MANIFEST_PATH=.repo/manifests/default.xml
         if grep -q deprecated <<< $REMOTE_BRANCH; then
-          echo "Found deprecated branch: ${{ github.event.inputs.TAG }}"
-          sed -i 's/"${{ github.event.inputs.TAG }}"/"deprecated\/${{ github.event.inputs.TAG }}"/g' $DEFAULT_MANIFEST_PATH
+          echo "Found deprecated branch: ${{ inputs.TAG }}"
+          sed -i 's/"${{ inputs.TAG }}"/"deprecated\/${{ inputs.TAG }}"/g' $DEFAULT_MANIFEST_PATH
         fi
         repo --trace sync -q -c -j$(nproc --all) --no-tags
-        df -h
 
     - name: Setup KernelSU
+      if: inputs.ENABLE_KSU == true
       run: |
         cd $GITHUB_WORKSPACE
         git clone https://github.com/tiann/KernelSU.git
@@ -61,34 +69,20 @@ jobs:
         ln -sf $GITHUB_WORKSPACE/KernelSU/kernel $GKI_ROOT/common/drivers/kernelsu
         echo "[+] Add KernelSU driver to Makefile"
         DRIVER_MAKEFILE=$GKI_ROOT/common/drivers/Makefile
-        grep -q "kernelsu" $DRIVER_MAKEFILE || echo "obj-m += kernelsu/" >> $DRIVER_MAKEFILE
+        DRIVER_KCONFIG=$GKI_ROOT/common/drivers/Kconfig
+        grep -q "kernelsu" "$DRIVER_MAKEFILE" || printf "\nobj-\$(CONFIG_KSU) += kernelsu/\n" >> "$DRIVER_MAKEFILE"
+        grep -q "kernelsu" "$DRIVER_KCONFIG" || sed -i "/endmenu/i\\source \"drivers/kernelsu/Kconfig\"" "$DRIVER_KCONFIG"
         echo "[+] KernelSU setup done."
 
-    - name: Symbol Magic
-      run: |
-        echo "[+] Export all symbol from abi_gki_aarch64.xml"
-        COMMON_ROOT=$GITHUB_WORKSPACE/android-kernel/common
-        KSU_ROOT=$GITHUB_WORKSPACE/KernelSU
-        ABI_XML=$COMMON_ROOT/android/abi_gki_aarch64.xml
-        SYMBOL_LIST=$COMMON_ROOT/android/abi_gki_aarch64
-        # python3 $KSU_ROOT/scripts/abi_gki_all.py $ABI_XML > $SYMBOL_LIST
-        echo "[+] Add KernelSU symbols"
-        cat $KSU_ROOT/kernel/export_symbol.txt | awk '{sub("[ \t]+","");print "  "$0}' >> $SYMBOL_LIST
-
-    - name: Setup ccache
-      uses: hendrikmuhs/ccache-action@v1.2
-      with:
-        key: gki-kernel-aarch64-${{ github.event.inputs.TAG }}
-        max-size: 2G
-
     - name: Setup for LKM
+      if: inputs.ENABLE_KSU == true && inputs.BUILD_AS_LKM == true
       working-directory: android-kernel
       run: |
         pip install ast-grep-cli
         sudo apt-get install llvm-15 -y
         ast-grep -U -p '$$$ check_exports($$$) {$$$}' -r '' common/scripts/mod/modpost.c
         ast-grep -U -p 'check_exports($$$);' -r '' common/scripts/mod/modpost.c
-        sed -i '1i KSU_MODULE := 1' $GITHUB_WORKSPACE/KernelSU/kernel/Makefile
+        sed -i '/config KSU/,/help/{s/default y/default m/}' common/drivers/kernelsu/Kconfig
         echo "drivers/kernelsu/kernelsu.ko" >> common/android/gki_aarch64_modules
         if [ ! -e build/build.sh ]; then
           sed -i 's/needs unknown symbol/Dont abort when unknown symbol/g' build/kernel/*.sh || echo "No unknown symbol scripts found"
@@ -106,40 +100,79 @@ jobs:
           sed -i 's/needs unknown symbol/Dont abort when unknown symbol/g' build/kernel/*.sh || echo "No unknown symbol scripts found"
         fi
 
+    - name: Symbol Magic
+      if: inputs.ENABLE_KSU == true
+      run: |
+        echo "[+] Export all symbol from abi_gki_aarch64.xml"
+        COMMON_ROOT=$GITHUB_WORKSPACE/android-kernel/common
+        KSU_ROOT=$GITHUB_WORKSPACE/KernelSU
+        ABI_XML=$COMMON_ROOT/android/abi_gki_aarch64.xml
+        SYMBOL_LIST=$COMMON_ROOT/android/abi_gki_aarch64
+        # python3 $KSU_ROOT/scripts/abi_gki_all.py $ABI_XML > $SYMBOL_LIST
+        echo "[+] Add KernelSU symbols"
+        cat $KSU_ROOT/kernel/export_symbol.txt | awk '{sub("[ \t]+","");print "  "$0}' >> $SYMBOL_LIST
+
     - name: Remove protected symbols
       working-directory: android-kernel
       run: rm common/android/abi_gki_protected_exports_* || echo "No protected exports!"
+
+    - name: Setup ccache
+      uses: hendrikmuhs/ccache-action@v1.2
+      with:
+        key: gki-kernel-aarch64-${{ inputs.TAG }}
+        max-size: 2G
 
     - name: Make working directory clean to avoid dirty
       working-directory: android-kernel
       run: cd common/ && git add -A && git commit -a -m "Add KernelSU"
 
-    - name: Build LKM
+    - name: Build Boot/LKM
       working-directory: android-kernel
       run: |
         if [ -e build/build.sh ]; then
-          LTO=thin BUILD_CONFIG=common/build.config.gki.aarch64 build/build.sh CC="/usr/bin/ccache clang" || echo "COMPILE_KERNEL=false" >>$GITHUB_ENV
+          BUILD_BOOT_IMG=1 SKIP_VENDOR_BOOT=1 KERNEL_BINARY=Image AVB_SIGN_BOOT_IMG=1 AVB_BOOT_PARTITION_SIZE=$((64*1024*1024)) AVB_BOOT_ALGORITHM=SHA256_RSA2048 AVB_BOOT_KEY=prebuilts/kernel-build-tools/linux-x86/share/avb/testkey_rsa2048.pem BOOT_IMAGE_HEADER_VERSION=4 LTO=thin BUILD_CONFIG=common/build.config.gki.aarch64 build/build.sh CC="/usr/bin/ccache clang" || echo "COMPILE_KERNEL=false" >>$GITHUB_ENV
         else
           tools/bazel run --cache_dir=/home/runner/.cache/bazel --config=fast --config=stamp --lto=thin //common:kernel_aarch64_dist -- --dist_dir=dist || echo "COMPILE_KERNEL=false" >>$GITHUB_ENV
         fi
 
     - name: Prepare artifacts
+      if: inputs.BUILD_AS_LKM == false
       run: |
-        mkdir output
-        if [ ${{ env.COMPILE_KERNEL }} = "false" ]; then
-          sudo apt-get install fd-find -y
-          fdfind -e ko kernelsu -x cp -f {} ./output/
-        else
-          OUTDIR=android-kernel/out/*/dist
-          if [ ! -e $OUTDIR ]; then
-            OUTDIR=android-kernel/dist
-          fi
-          cp $OUTDIR/kernelsu.ko ./output/
+        OUTDIR=android-kernel/out/*/dist
+        if [ ! -e $OUTDIR ]; then
+          OUTDIR=android-kernel/dist
         fi
-        llvm-strip-15 -d ./output/kernelsu.ko
+        mkdir output
+        cp $OUTDIR/boot.img ./output/
+        git clone https://github.com/Kernel-SU/AnyKernel3
+        rm -rf ./AnyKernel3/.git
+        cp $OUTDIR/Image ./AnyKernel3/
 
-    - name: Upload LKM
+    - name: Prepare artifacts
+      if: inputs.BUILD_AS_LKM == true
+      run: |
+        mkdir lkm
+        sudo apt-get install fd-find -y
+        fdfind -e ko kernelsu -x cp -f {} ./lkm/
+        llvm-strip-15 -d ./lkm/kernelsu.ko
+
+    - name: Upload Boot
+      if: inputs.BUILD_AS_LKM == false
       uses: actions/upload-artifact@v4
       with:
-        name: LKM_KernelSU_${{ github.event.inputs.TAG }}
-        path: ./output/kernelsu.ko
+        name: Boot_KernelSU_${{ inputs.TAG }}
+        path: ./output/boot.img
+
+    - name: Upload AnyKernel3
+      if: inputs.BUILD_AS_LKM == false
+      uses: actions/upload-artifact@v4
+      with:
+          name: AnyKernel3_KernelSU_${{ inputs.TAG }}
+          path: ./AnyKernel3/*
+
+    - name: Upload LKM
+      if: inputs.BUILD_AS_LKM == true
+      uses: actions/upload-artifact@v4
+      with:
+        name: LKM_KernelSU_${{ inputs.TAG }}
+        path: ./lkm/kernelsu.ko
