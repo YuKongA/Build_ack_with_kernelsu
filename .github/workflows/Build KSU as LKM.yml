@@ -122,7 +122,6 @@ jobs:
         else
           tools/bazel run --cache_dir=/home/runner/.cache/bazel --config=fast --config=stamp --lto=thin //common:kernel_aarch64_dist -- --dist_dir=dist || echo "COMPILE_KERNEL=false" >>$GITHUB_ENV
         fi
-        du -sh /home/runner/.cache/bazel
 
     - name: Prepare artifacts
       run: |
