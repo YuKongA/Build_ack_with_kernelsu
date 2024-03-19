@@ -149,7 +149,7 @@ jobs:
         cp $OUTDIR/Image ./AnyKernel3/
 
     - name: Prepare artifacts
-      if: inputs.BUILD_AS_LKM == true
+      if: inputs.ENABLE_KSU == true && inputs.BUILD_AS_LKM == true
       run: |
         mkdir lkm
         sudo apt-get install fd-find -y
@@ -157,21 +157,35 @@ jobs:
         llvm-strip-15 -d ./lkm/kernelsu.ko
 
     - name: Upload Boot
-      if: inputs.BUILD_AS_LKM == false
+      if: inputs.ENABLE_KSU == true && inputs.BUILD_AS_LKM == false
       uses: actions/upload-artifact@v4
       with:
         name: Boot_KernelSU_${{ inputs.TAG }}
         path: ./output/boot.img
 
     - name: Upload AnyKernel3
-      if: inputs.BUILD_AS_LKM == false
+      if: inputs.ENABLE_KSU == true && inputs.BUILD_AS_LKM == false
       uses: actions/upload-artifact@v4
       with:
           name: AnyKernel3_KernelSU_${{ inputs.TAG }}
           path: ./AnyKernel3/*
 
+    - name: Upload Boot
+      if: inputs.ENABLE_KSU == false && inputs.BUILD_AS_LKM == false
+      uses: actions/upload-artifact@v4
+      with:
+        name: Boot_Non-KernelSU_${{ inputs.TAG }}
+        path: ./output/boot.img
+
+    - name: Upload AnyKernel3
+      if: inputs.ENABLE_KSU == false && inputs.BUILD_AS_LKM == false
+      uses: actions/upload-artifact@v4
+      with:
+          name: AnyKernel3_Non-KernelSU_${{ inputs.TAG }}
+          path: ./AnyKernel3/*
+
     - name: Upload LKM
-      if: inputs.BUILD_AS_LKM == true
+      if: inputs.ENABLE_KSU == true && inputs.BUILD_AS_LKM == true
       uses: actions/upload-artifact@v4
       with:
         name: LKM_KernelSU_${{ inputs.TAG }}
