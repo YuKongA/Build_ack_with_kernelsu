@@ -152,8 +152,16 @@ jobs:
       if: inputs.ENABLE_KSU == true && inputs.BUILD_AS_LKM == true
       run: |
         mkdir lkm
-        sudo apt-get install fd-find -y
-        fdfind -e ko kernelsu -x cp -f {} ./lkm/
+        if [ ${{ env.COMPILE_KERNEL }} = "false" ]; then
+          sudo apt-get install fd-find -y
+          fdfind -e ko kernelsu -x cp -f {} ./lkm/
+        else
+          OUTDIR=android-kernel/out/*/dist
+          if [ ! -e $OUTDIR ]; then
+            OUTDIR=android-kernel/dist
+          fi
+          cp $OUTDIR/kernelsu.ko ./lkm/
+        fi
         llvm-strip-15 -d ./lkm/kernelsu.ko
 
     - name: Upload Boot
