@@ -4,7 +4,7 @@ on:
     inputs:
       TAG:
         required: true
-        default: "android14-6.1-2023-06"
+        default: "android15-6.6-2025-02"
       ENABLE_KSU:
         required: true
         type: boolean
@@ -23,7 +23,6 @@ jobs:
     env:
       CCACHE_COMPILERCHECK: "%compiler% -dumpmachine; %compiler% -dumpversion"
       CCACHE_NOHASHDIR: "true"
-      CCACHE_MAXSIZE: "2G"
       CCACHE_HARDLINK: "true"
     steps:
     - name: Maximize Build Space
@@ -54,7 +53,7 @@ jobs:
           echo "Found deprecated branch: ${{ inputs.TAG }}"
           sed -i 's/"${{ inputs.TAG }}"/"deprecated\/${{ inputs.TAG }}"/g' $DEFAULT_MANIFEST_PATH
         fi
-        repo --trace sync -q -c -j$(nproc --all) --no-tags
+        repo --trace sync -c -j$(nproc --all) --no-tags
 
     - name: Setup KernelSU
       if: inputs.ENABLE_KSU == true
@@ -72,6 +71,15 @@ jobs:
         DRIVER_KCONFIG=$GKI_ROOT/common/drivers/Kconfig
         grep -q "kernelsu" "$DRIVER_MAKEFILE" || printf "\nobj-\$(CONFIG_KSU) += kernelsu/\n" >> "$DRIVER_MAKEFILE"
         grep -q "kernelsu" "$DRIVER_KCONFIG" || sed -i "/endmenu/i\\source \"drivers/kernelsu/Kconfig\"" "$DRIVER_KCONFIG"
+        echo "[+] Apply Compilation Patches"
+        if [ ! -e build/build.sh ]; then
+          GLIBC_VERSION=$(ldd --version 2>/dev/null | head -n 1 | awk '{print $NF}')
+          echo "GLIBC_VERSION: $GLIBC_VERSION"
+          if [ "$(printf '%s\n' "2.38" "$GLIBC_VERSION" | sort -V | head -n1)" = "2.38" ]; then
+            echo "Patching resolve_btfids/Makefile"
+            cd $GKI_ROOT/common/ && sed -i '/\$(Q)\$(MAKE) -C \$(SUBCMD_SRC) OUTPUT=\$(abspath \$(dir \$@))\/ \$(abspath \$@)/s//$(Q)$(MAKE) -C $(SUBCMD_SRC) EXTRA_CFLAGS="$(CFLAGS)" OUTPUT=$(abspath $(dir $@))\/ $(abspath $@)/' tools/bpf/resolve_btfids/Makefile || echo "No patch needed."
+          fi
+        fi
         echo "[+] KernelSU setup done."
 
     - name: Setup for LKM
