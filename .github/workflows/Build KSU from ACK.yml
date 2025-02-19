@@ -152,7 +152,7 @@ jobs:
         fi
         mkdir output
         cp $OUTDIR/boot.img ./output/
-        git clone https://github.com/Kernel-SU/AnyKernel3
+        git clone https://github.com/YuKongA/AnyKernel3
         rm -rf ./AnyKernel3/.git
         cp $OUTDIR/Image ./AnyKernel3/
 
