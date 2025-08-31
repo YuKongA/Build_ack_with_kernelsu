@@ -4,7 +4,7 @@ on:
     inputs:
       TAG:
         required: true
-        default: 'android15-6.6-2025-02'
+        default: "android15-6.6-2025-02"
       ENABLE_KSU:
         required: true
         type: boolean
@@ -152,7 +152,7 @@ jobs:
         fi
         mkdir output
         cp $OUTDIR/boot.img ./output/
-        git clone https://github.com/YuKongA/AnyKernel3
+        git clone https://github.com/Kernel-SU/AnyKernel3
         rm -rf ./AnyKernel3/.git
         cp $OUTDIR/Image ./AnyKernel3/
 
